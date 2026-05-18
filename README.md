@@ -190,7 +190,7 @@ CLI 刻意精简到 4 个 flag，全部可选。**99% 场景默认即可**。
 | --- | --- | --- |
 | `--cloak` | 切换到 CloakBrowser 隐身二进制（取代系统 Chrome）。叠加 49 个 C++ 源码层指纹 patch。首次启动自动下载 ~200MB 二进制；指纹身份按 profile 持久化。详见 [docs/cloak.md](docs/cloak.md)。 | `false` |
 | `--isolated` | 使用临时 user-data-dir（cookies/localStorage 不保留，关闭时自动清理） | `false` |
-| `--browserUrl, -u` | 连接到已运行的 Chrome 实例（CDP HTTP 端点，如 `http://127.0.0.1:9222`）。MCP 会自动探测出 WebSocket debugger URL。 | – |
+| `--browserUrl, -u` | 连接到已运行的 Chrome 实例（CDP HTTP 端点，如 `http://127.0.0.1:9222`）。MCP 会自动探测出 WebSocket debugger URL。本地 Chrome、AdsPower、BitBrowser 等怎么拿到这个端点详见 [docs/cdp-endpoint.md](docs/cdp-endpoint.md)。 | – |
 | `--logFile` | 调试日志输出文件路径（配合 `DEBUG=*` 环境变量得到详细日志） | – |
 
 ### 示例配置
@@ -257,25 +257,19 @@ CLI 刻意精简到 4 个 flag，全部可选。**99% 场景默认即可**。
 }
 ```
 
-### 连接到已运行的 Chrome
+### 连接到已运行的 Chrome / 第三方指纹浏览器
 
-如果你想复用已经开着的 Chrome（比如有不想丢的长会话），用 remote debugging 端口连接：
+`--browserUrl` 只接受 **CDP endpoint**（能响应 `/json/version` 的 HTTP 端点），不接受厂商私有 Local API。本地 Chrome、AdsPower、BitBrowser 等场景下怎么拿到 CDP 端口，详见专门的文档：
 
-1. 启动 Chrome（先关掉其它 Chrome 窗口）：
+📖 **[docs/cdp-endpoint.md —— 如何拿到 CDP 调试端口](docs/cdp-endpoint.md)**
 
-**macOS**
-
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
-```
-
-**Windows**
+最短路径（本地 Chrome）：
 
 ```bash
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\chrome-debug"
+# 先关掉所有 Chrome 窗口，然后
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
 ```
-
-2. MCP 配置：
 
 ```json
 {
@@ -287,6 +281,8 @@ CLI 刻意精简到 4 个 flag，全部可选。**99% 场景默认即可**。
   }
 }
 ```
+
+指纹浏览器（AdsPower、BitBrowser 等）的 CDP 端口是**每次启动随机变化**的，必须通过厂商 Local API 启动浏览器后再提取，操作步骤和示例脚本都在上面那篇文档里。
 
 ## 故障排除
 

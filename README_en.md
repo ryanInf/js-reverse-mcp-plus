@@ -190,7 +190,7 @@ The CLI is intentionally minimal — four flags, all optional. Default behavior 
 | --- | --- | --- |
 | `--cloak` | Use CloakBrowser stealth-patched Chromium binary instead of system Chrome. Adds 49 source-level C++ fingerprint patches. Binary auto-downloads (~200MB) on first use. Identity is persisted per profile. See [docs/cloak.en.md](docs/cloak.en.md). | `false` |
 | `--isolated` | Use a temporary user data directory (cookies/localStorage not persisted, auto-cleaned on close) | `false` |
-| `--browserUrl, -u` | Connect to a running Chrome instance via CDP HTTP endpoint (e.g. `http://127.0.0.1:9222`). The MCP probes it to find the WebSocket debugger URL. | – |
+| `--browserUrl, -u` | Connect to a running Chrome instance via CDP HTTP endpoint (e.g. `http://127.0.0.1:9222`). The MCP probes it to find the WebSocket debugger URL. See [docs/cdp-endpoint.en.md](docs/cdp-endpoint.en.md) for how to obtain this endpoint from local Chrome, AdsPower, BitBrowser, etc. | – |
 | `--logFile` | Path to write debug logs (also set env `DEBUG=*` for verbose logs) | – |
 
 ### Example Configurations
@@ -257,25 +257,19 @@ The CLI is intentionally minimal — four flags, all optional. Default behavior 
 }
 ```
 
-### Connect to a Running Chrome Instance
+### Connect to a Running Chrome / Third-Party Fingerprint Browser
 
-If you'd rather reuse a Chrome already running on your machine (e.g. you have a long-lived session you don't want to disturb), launch Chrome with the remote debugging port and connect to it:
+`--browserUrl` accepts **CDP endpoints only** (an HTTP endpoint that responds to `/json/version`), not vendor-private Local APIs. For how to obtain the CDP port from local Chrome, AdsPower, BitBrowser, etc., see the dedicated guide:
 
-1. Launch Chrome (close other Chrome windows first):
+📖 **[docs/cdp-endpoint.en.md — How to get the CDP debug endpoint](docs/cdp-endpoint.en.md)**
 
-**macOS**
-
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
-```
-
-**Windows**
+Shortest path (local Chrome):
 
 ```bash
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%TEMP%\chrome-debug"
+# Close all existing Chrome windows first, then:
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-debug
 ```
-
-2. Configure MCP connection:
 
 ```json
 {
@@ -287,6 +281,8 @@ If you'd rather reuse a Chrome already running on your machine (e.g. you have a 
   }
 }
 ```
+
+Fingerprint browsers (AdsPower, BitBrowser, etc.) hand out a **randomly assigned CDP port every launch** — you must call the vendor's Local API to start a profile and extract the port from the response. Full walkthrough and sample launcher scripts in the doc above.
 
 ## Troubleshooting
 

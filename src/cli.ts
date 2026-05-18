@@ -43,7 +43,9 @@ export const cliOptions = {
       'Adds source-level fingerprint patches (canvas/WebGL/audio/GPU). ' +
       'Binary auto-downloads (~200MB) on first use. Identity is persisted ' +
       'per profile in <profile>/.cloak-seed.',
-    default: false,
+    // No `default: false` here on purpose: yargs treats a defaulted boolean as
+    // "set", which makes `conflicts` fire even when the user only passed
+    // `--browserUrl`. Leaving it undefined keeps the conflict check honest.
     conflicts: ['browserUrl'],
   },
 } satisfies Record<string, YargsOptions>;
