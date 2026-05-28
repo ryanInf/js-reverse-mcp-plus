@@ -100,3 +100,143 @@ export const listNetworkRequests = defineTool({
     });
   },
 });
+
+/**
+ * Intercept and modify network responses via CDP Fetch domain.
+ * Can intercept JS/CSS/HTML and any other resource, modifying
+ * the response body before it reaches the page.
+ *
+ * WARNING: Fetch.enable activates a CDP domain that anti-bot systems
+ * can detect. Use only when network-level interception is required.
+ */
+export const interceptResponse = defineTool({
+  name: 'intercept_response',
+  description:
+    'Intercept and modify network responses via CDP Fetch domain. Can replace the entire response body for matching URLs or apply a JS transform function. WARNING: Fetch.enable activates a CDP domain that anti-bot systems can detect — use only when network-level interception is required.',
+  annotations: {
+    title: 'Intercept Response',
+    category: ToolCategory.NETWORK,
+    readOnlyHint: false,
+  },
+  schema: {
+    action: zod
+      .enum(['intercept', 'remove', 'list'])
+      .describe('Action to perform.'),
+    urlPattern: zod
+      .string()
+      .optional()
+      .describe(
+        'URL pattern to match (substring, case-insensitive). Required for intercept.',
+      ),
+    resourceType: zod
+      .string()
+      .optional()
+      .describe(
+        'Resource type filter: "Script", "Document", "Stylesheet", "XHR", "Fetch", etc.',
+      ),
+    replacement: zod
+      .string()
+      .optional()
+      .describe(
+        'Static replacement response body. Use this for complete replacements.',
+      ),
+    transform: zod
+      .string()
+      .optional()
+      .describe(
+        'JS function body to transform the response. Receives `body` (string) and must return a string. Example: "return body.replace(/old/g, \'new\')"',
+      ),
+    ruleId: zod
+      .string()
+      .optional()
+      .describe('Rule ID. Auto-generated if not provided for intercept. Required for remove.'),
+  },
+  handler: async (request, response, context) => {
+    const {action, urlPattern, resourceType, replacement, transform, ruleId} =
+      request.params;
+    const interceptor = context.fetchInterceptor;
+
+    try {
+      // List mode
+      if (action === 'list') {
+        const rules = interceptor.getRules();
+        if (rules.length === 0) {
+          response.appendResponseLine('No active interception rules.');
+          return;
+        }
+        response.appendResponseLine(
+          `Active interception rules (${rules.length}):\n`,
+        );
+        for (const rule of rules) {
+          response.appendResponseLine(`- ID: ${rule.id}`);
+          response.appendResponseLine(`  URL pattern: ${rule.urlPattern}`);
+          if (rule.resourceType) {
+            response.appendResponseLine(
+              `  Resource type: ${rule.resourceType}`,
+            );
+          }
+          if (rule.replacement !== undefined) {
+            const preview =
+              rule.replacement.length > 100
+                ? rule.replacement.substring(0, 100) + '...'
+                : rule.replacement;
+            response.appendResponseLine(`  Replacement: ${preview}`);
+          } else if (rule.transform) {
+            response.appendResponseLine(`  Transform: ${rule.transform}`);
+          }
+          response.appendResponseLine('');
+        }
+        return;
+      }
+
+      // Remove mode
+      if (action === 'remove') {
+        if (!ruleId) {
+          response.appendResponseLine('ruleId is required for remove action.');
+          return;
+        }
+        await interceptor.removeRule(ruleId);
+        response.appendResponseLine(`Interception rule removed: ${ruleId}`);
+        return;
+      }
+
+      // Intercept mode
+      if (!urlPattern) {
+        response.appendResponseLine(
+          'urlPattern is required for intercept action.',
+        );
+        return;
+      }
+      if (!replacement && !transform) {
+        response.appendResponseLine(
+          'Either replacement or transform must be provided.',
+        );
+        return;
+      }
+
+      const id = ruleId || `intercept_${Date.now()}`;
+      await interceptor.addRule({
+        id,
+        urlPattern,
+        resourceType,
+        replacement,
+        transform,
+      });
+      response.appendResponseLine(`✅ Interception rule added. ID: ${id}`);
+      response.appendResponseLine(`  URL pattern: ${urlPattern}`);
+      if (resourceType) {
+        response.appendResponseLine(`  Resource type: ${resourceType}`);
+      }
+      response.appendResponseLine(
+        'Responses will be modified on the next request matching this pattern.',
+      );
+      response.appendResponseLine(
+        `To remove: intercept_response(action: "remove", ruleId: "${id}")`,
+      );
+    } catch (error) {
+      response.appendResponseLine(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+});

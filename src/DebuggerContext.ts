@@ -227,8 +227,36 @@ export class DebuggerContext {
         scriptIds.push(event.scriptId);
         this.#urlToScripts.set(event.url, scriptIds);
       }
+
+      // Auto-apply URL overrides after navigation
+      const override = this.#urlOverrides.get(event.url);
+      if (override) {
+        void this.#applyUrlOverride(event.scriptId, override);
+      }
     }
   };
+
+  /**
+   * Apply a URL-based override to a newly parsed script.
+   * Fire-and-forget — errors are logged but don't disrupt script loading.
+   */
+  async #applyUrlOverride(
+    scriptId: string,
+    rule: { search: string; replace: string; newSource?: string },
+  ): Promise<void> {
+    try {
+      const result = await this.getScriptSource(scriptId);
+      let newSource: string;
+      if (rule.newSource) {
+        newSource = rule.newSource;
+      } else {
+        newSource = result.scriptSource.replaceAll(rule.search, rule.replace);
+      }
+      await this.setScriptSource(scriptId, newSource);
+    } catch {
+      // Silently skip — script may not support setScriptSource (e.g. WASM)
+    }
+  }
 
   #onPaused = (event: Protocol.Debugger.PausedEvent): void => {
     const callFrames: CallFrame[] = event.callFrames.map(frame => ({
@@ -776,6 +804,68 @@ export class DebuggerContext {
         // Skip breakpoints that fail to restore
       }
     }
+  }
+
+  // ==================== Script Override (setScriptSource) ====================
+
+  /**
+   * Persisted override rules keyed by script URL.
+   * When a script with a matching URL is parsed, the override is auto-applied.
+   */
+  #urlOverrides = new Map<
+    string,
+    { search: string; replace: string; newSource?: string }
+  >();
+
+  /**
+   * Override a loaded script's source in real-time via Debugger.setScriptSource.
+   * The change takes effect immediately in V8 but is lost after navigation
+   * (scriptId changes). Use persist=true to auto-reapply after navigation.
+   */
+  async setScriptSource(
+    scriptId: string,
+    newSource: string,
+  ): Promise<{stackChanged: boolean}> {
+    if (!this.#client) {
+      throw new Error('Debugger not enabled');
+    }
+
+    const result = await this.#client.send('Debugger.setScriptSource', {
+      scriptId,
+      scriptSource: newSource,
+    });
+
+    return {
+      stackChanged: result.stackChanged ?? false,
+    };
+  }
+
+  /**
+   * Store a URL-based override rule that will auto-apply when matching
+   * scripts are parsed (e.g. after navigation).
+   */
+  setUrlOverride(
+    url: string,
+    rule: { search: string; replace: string; newSource?: string },
+  ): void {
+    this.#urlOverrides.set(url, rule);
+  }
+
+  /**
+   * Remove a URL-based override rule.
+   */
+  removeUrlOverride(url: string): boolean {
+    return this.#urlOverrides.delete(url);
+  }
+
+  /**
+   * Get all URL-based override rules.
+   */
+  getUrlOverrides(): Map<
+    string,
+    { search: string; replace: string; newSource?: string }
+  > {
+    return new Map(this.#urlOverrides);
   }
 
   // ==================== Breakpoint Management ====================

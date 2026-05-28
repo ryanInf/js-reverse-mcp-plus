@@ -12,6 +12,8 @@ import {type AggregatedIssue} from '../node_modules/chrome-devtools-frontend/mcp
 
 import {CdpSessionProvider} from './CdpSessionProvider.js';
 import {DebuggerContext} from './DebuggerContext.js';
+import {FetchInterceptor} from './FetchInterceptor.js';
+import type {InterceptRule} from './FetchInterceptor.js';
 import {extractUrlLikeFromDevToolsTitle, urlsEqual} from './DevtoolsUtils.js';
 import type {TrafficSummary} from './formatters/websocketFormatter.js';
 import {NetworkCollector, ConsoleCollector} from './PageCollector.js';
@@ -80,10 +82,12 @@ export class McpContext implements Context {
   #cpuThrottlingRateMap = new WeakMap<Page, number>();
   #dialog?: Dialog;
   #debuggerContext: DebuggerContext = new DebuggerContext();
+  #fetchInterceptor: FetchInterceptor;
   #selectedFrame?: Frame;
 
   #traceResults: TraceResult[] = [];
   #trafficSummaryCache = new Map<number, TrafficSummary>();
+  #injectedScripts = new Map<string, string>(); // identifier → source
 
   #navigationTimeout = NAVIGATION_TIMEOUT;
 
@@ -126,6 +130,11 @@ export class McpContext implements Context {
     );
 
     this.#webSocketCollector = new WebSocketCollector(
+      this.browserContext,
+      this.sessionProvider,
+    );
+
+    this.#fetchInterceptor = new FetchInterceptor(
       this.browserContext,
       this.sessionProvider,
     );
@@ -193,6 +202,27 @@ export class McpContext implements Context {
     }
   }
 
+  /**
+   * Track an injected script for the current session.
+   */
+  trackInjectedScript(identifier: string, source: string): void {
+    this.#injectedScripts.set(identifier, source);
+  }
+
+  /**
+   * Untrack an injected script. Returns true if found and removed.
+   */
+  untrackInjectedScript(identifier: string): boolean {
+    return this.#injectedScripts.delete(identifier);
+  }
+
+  /**
+   * Get all injected scripts (identifier → source).
+   */
+  getInjectedScripts(): Map<string, string> {
+    return new Map(this.#injectedScripts);
+  }
+
   dispose() {
     this.#networkCollector.dispose();
     this.#consoleCollector.dispose();
@@ -205,6 +235,13 @@ export class McpContext implements Context {
    */
   get debuggerContext(): DebuggerContext {
     return this.#debuggerContext;
+  }
+
+  /**
+   * Get the Fetch interceptor for network response modification.
+   */
+  get fetchInterceptor(): FetchInterceptor {
+    return this.#fetchInterceptor;
   }
 
   /**

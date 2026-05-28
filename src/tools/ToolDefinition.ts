@@ -5,6 +5,7 @@
  */
 
 import type {DebuggerContext} from '../DebuggerContext.js';
+import type {FetchInterceptor} from '../FetchInterceptor.js';
 import type {TrafficSummary} from '../formatters/websocketFormatter.js';
 import type {RequestInitiator} from '../PageCollector.js';
 import {zod} from '../third_party/index.js';
@@ -170,6 +171,22 @@ export type Context = Readonly<{
    * Also reinitializes the debugger for the main page's CDP session.
    */
   resetSelectedFrame(): void;
+  /**
+   * Track an injected script for the current session.
+   */
+  trackInjectedScript(identifier: string, source: string): void;
+  /**
+   * Untrack an injected script. Returns true if found and removed.
+   */
+  untrackInjectedScript(identifier: string): boolean;
+  /**
+   * Get all injected scripts (identifier → source).
+   */
+  getInjectedScripts(): Map<string, string>;
+  /**
+   * Get the Fetch interceptor for network response modification.
+   */
+  fetchInterceptor: FetchInterceptor;
 }>;
 
 export function defineTool<Schema extends zod.ZodRawShape>(

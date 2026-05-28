@@ -136,38 +136,4 @@ Test before deleting: "What does this flag actually do at runtime? Would removin
 
 ## Known Residual Leaks
 
-These leaks also exist in Patchright, Scrapling, and similar tools. **They do not break mainstream anti-bot tests**:
-
-| Detection | Current value | Expected | Notes |
-|---|---|---|---|
-| `chrome.runtime` | `undefined` | Should be a full object | Chrome hides this when controlled via CDP; cloak binary doesn't patch it either |
-| `chrome.app` | `undefined` | Same as above | Same |
-| `Error.stack` from `evaluate()` | contains isolated-context markers | Should be a normal stack | Patchright's isolated world marker, only visible in evaluate call stacks |
-
-**Do not try to patch these at the JS level** — see Principle 1.
-
-## CDP-Aware Debugging Workflow
-
-Because navigation tools intentionally keep CDP silent, **requests, console messages, WebSocket connections, and JS script lists are not collected during initial page load**. This is by design — pass risk controls first, then open the debugging channel.
-
-Recommended workflow (**navigate first, then reload**):
-
-```
-# 1. Navigate to target (silent, passes risk controls)
-new_page(url="https://example.com")
-
-# 2. Any non-navigation tool call — triggers CDP collector activation
-list_network_requests()   # returns empty here, but collectors are now active
-
-# 3. Reload to capture everything
-navigate_page(type="reload")
-
-# 4. Now you see the full request list
-list_network_requests()
-```
-
-## Further Reading
-
-- Full `--cloak` guide, profile/fingerprint identity binding, dual-MCP setup: [cloak.en.md](cloak.en.md)
-- CloakBrowser project (49 C++ patches explained): https://github.com/CloakHQ/CloakBrowser
-- How Patchright's protocol-layer stealth works: https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-nodejs
+These leaks also exist in Patchright, Scrapling, and s

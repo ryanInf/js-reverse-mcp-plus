@@ -6,21 +6,24 @@
   - [`navigate_page`](#navigate_page)
   - [`new_page`](#new_page)
   - [`select_page`](#select_page)
-- **[Network](#network)** (2 tools)
+- **[Network](#network)** (3 tools)
   - [`get_websocket_messages`](#get_websocket_messages)
+  - [`intercept_response`](#intercept_response)
   - [`list_network_requests`](#list_network_requests)
 - **[Debugging](#debugging)** (4 tools)
   - [`evaluate_script`](#evaluate_script)
   - [`list_console_messages`](#list_console_messages)
   - [`select_frame`](#select_frame)
   - [`take_screenshot`](#take_screenshot)
-- **[JS Reverse Engineering](#js-reverse-engineering)** (12 tools)
+- **[JS Reverse Engineering](#js-reverse-engineering)** (14 tools)
   - [`break_on_xhr`](#break_on_xhr)
   - [`get_paused_info`](#get_paused_info)
   - [`get_request_initiator`](#get_request_initiator)
   - [`get_script_source`](#get_script_source)
+  - [`inject_before_load`](#inject_before_load)
   - [`list_breakpoints`](#list_breakpoints)
   - [`list_scripts`](#list_scripts)
+  - [`override_script`](#override_script)
   - [`pause_or_resume`](#pause_or_resume)
   - [`remove_breakpoint`](#remove_breakpoint)
   - [`save_script_source`](#save_script_source)
@@ -82,6 +85,21 @@
 - **show_content** (boolean) _(optional)_: Set to true to show full message payload. Default false (summary only) to avoid large binary output.
 - **urlFilter** (string) _(optional)_: Filter connections by URL (only for listing connections without wsid).
 - **wsid** (number) _(optional)_: The wsid of the WebSocket connection. If omitted, lists all connections.
+
+---
+
+### `intercept_response`
+
+**Description:** Intercept and modify network responses via CDP Fetch domain. Can replace the entire response body for matching URLs or apply a JS transform function. WARNING: Fetch.enable activates a CDP domain that anti-bot systems can detect — use only when network-level interception is required.
+
+**Parameters:**
+
+- **action** (enum: "intercept", "remove", "list") **(required)**: Action to perform.
+- **urlPattern** (string) _(optional)_: URL pattern to match (substring, case-insensitive). Required for intercept.
+- **resourceType** (string) _(optional)_: Resource type filter: "Script", "Document", "Stylesheet", "XHR", "Fetch", etc.
+- **replacement** (string) _(optional)_: Static replacement response body. Use this for complete replacements.
+- **transform** (string) _(optional)_: JS function body to transform the response. Receives `body` (string) and must return a string. Example: "return body.replace(/old/g, 'new')"
+- **ruleId** (string) _(optional)_: Rule ID. Auto-generated if not provided for intercept. Required for remove.
 
 ---
 
@@ -174,6 +192,18 @@ so returned values have to JSON-serializable. When execution is paused at a brea
 
 ---
 
+### `inject_before_load`
+
+**Description:** Injects a JavaScript script that runs before any page script on every page load (including refreshes and navigations). Persists until removed. Uses CDP Page.addScriptToEvaluateOnNewDocument.
+
+**Parameters:**
+
+- **action** (enum: "inject", "remove", "list") _(optional)_: Action to perform. "inject" (default when script is provided), "remove" (when identifier is provided), "list" (show all injected scripts).
+- **identifier** (string) _(optional)_: The identifier of a previously injected script to remove.
+- **script** (string) _(optional)_: JavaScript code to inject. Runs before any page script. Example: Object.defineProperty(window, "h5sign", { set(v) { debugger; this._h5sign = v; }, get() { return this._h5sign; } })
+
+---
+
 ### `get_paused_info`
 
 **Description:** Gets information about the current paused state including call stack, current location, and scope variables. Use this after a breakpoint is hit to understand the execution context.
@@ -208,6 +238,22 @@ so returned values have to JSON-serializable. When execution is paused at a brea
 - **scriptId** (string) _(optional)_: Script ID (from [`list_scripts`](#list_scripts)). Becomes invalid after page navigation — prefer url instead.
 - **startLine** (integer) _(optional)_: Start line number (1-based). Use for multi-line files.
 - **url** (string) _(optional)_: Script URL (preferred). Stable across page navigations. Exact match first, then substring match.
+
+---
+
+### `override_script`
+
+**Description:** Override a loaded script source in real-time via Debugger.setScriptSource. Changes take effect immediately in V8. Supports search/replace or full source replacement. Optionally persists across navigations by auto-reapplying when the script is reparsed.
+
+**Parameters:**
+
+- **action** (enum: "override", "restore", "list") **(required)**: Action to perform.
+- **urlPattern** (string) _(optional)_: URL pattern to match script (substring match, case-insensitive).
+- **scriptId** (string) _(optional)_: Specific scriptId to override.
+- **search** (string) _(optional)_: Text to search for in the script source.
+- **replace** (string) _(optional)_: Replacement text for search matches.
+- **newSource** (string) _(optional)_: Complete new source code (overrides search/replace). Use for full replacements.
+- **persist** (boolean) _(optional)_: Auto-restore after navigation by storing the override rule (default: true). Only works with urlPattern.
 
 ---
 

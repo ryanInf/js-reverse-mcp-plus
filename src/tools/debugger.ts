@@ -1313,3 +1313,319 @@ export const breakOnXhr = defineTool({
     }
   },
 });
+
+/**
+ * Inject a JavaScript script that runs before any page script on every page load.
+ * Uses CDP Page.addScriptToEvaluateOnNewDocument — persists across navigations
+ * until explicitly removed.
+ */
+export const injectBeforeLoad = defineTool({
+  name: 'inject_before_load',
+  description:
+    'Injects a JavaScript script that runs before any page script on every page load (including refreshes and navigations). Persists until removed. Uses CDP Page.addScriptToEvaluateOnNewDocument.',
+  annotations: {
+    title: 'Inject Before Load',
+    category: ToolCategory.REVERSE_ENGINEERING,
+    readOnlyHint: false,
+  },
+  schema: {
+    script: zod
+      .string()
+      .optional()
+      .describe(
+        'JavaScript code to inject. Runs before any page script. Example: Object.defineProperty(window, "h5sign", { set(v) { debugger; this._h5sign = v; }, get() { return this._h5sign; } })',
+      ),
+    identifier: zod
+      .string()
+      .optional()
+      .describe(
+        'The identifier of a previously injected script to remove.',
+      ),
+    action: zod
+      .enum(['inject', 'remove', 'list'])
+      .optional()
+      .describe(
+        'Action to perform. "inject" (default when script is provided), "remove" (when identifier is provided), "list" (show all injected scripts).',
+      ),
+  },
+  handler: async (request, response, context) => {
+    const {script, identifier, action} = request.params;
+    const debugger_ = context.debuggerContext;
+
+    if (!debugger_.isEnabled()) {
+      response.appendResponseLine(
+        'Debugger is not enabled. Please select a page first.',
+      );
+      return;
+    }
+
+    const client = debugger_.getClient();
+    if (!client) {
+      response.appendResponseLine('Debugger client not available.');
+      return;
+    }
+
+    try {
+      // List mode
+      if (action === 'list' || (!script && !identifier)) {
+        const scripts = context.getInjectedScripts();
+        if (scripts.size === 0) {
+          response.appendResponseLine('No injected scripts.');
+          return;
+        }
+        response.appendResponseLine(
+          `Injected scripts (${scripts.size}):\n`,
+        );
+        for (const [id, source] of scripts) {
+          const preview =
+            source.length > 100
+              ? source.substring(0, 100) + '...'
+              : source;
+          response.appendResponseLine(`- ID: ${id}`);
+          response.appendResponseLine(`  Source: ${preview}`);
+          response.appendResponseLine('');
+        }
+        return;
+      }
+
+      // Remove mode
+      if (identifier && !script) {
+        await client.send('Page.removeScriptToEvaluateOnNewDocument', {
+          identifier,
+        });
+        context.untrackInjectedScript(identifier);
+        response.appendResponseLine(
+          `Injected script removed: ${identifier}`,
+        );
+        return;
+      }
+
+      // Inject mode
+      if (script) {
+        await client.send('Page.enable');
+        const result = await client.send(
+          'Page.addScriptToEvaluateOnNewDocument',
+          {source: script},
+        );
+        const id = result.identifier;
+        context.trackInjectedScript(id, script);
+        response.appendResponseLine(`✅ Script injected. Identifier: ${id}`);
+        response.appendResponseLine(
+          'It will run before any page script on every load.',
+        );
+        response.appendResponseLine(
+          `To remove: inject_before_load(identifier: "${id}")`,
+        );
+        return;
+      }
+    } catch (error) {
+      response.appendResponseLine(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+});
+
+/**
+ * Override a loaded script's source in real-time via Debugger.setScriptSource.
+ * Supports search/replace or full source replacement. Can persist across navigations.
+ */
+export const overrideScript = defineTool({
+  name: 'override_script',
+  description:
+    'Override a loaded script source in real-time via Debugger.setScriptSource. Changes take effect immediately in V8. Supports search/replace or full source replacement. Optionally persists across navigations by auto-reapplying when the script is reparsed.',
+  annotations: {
+    title: 'Override Script',
+    category: ToolCategory.REVERSE_ENGINEERING,
+    readOnlyHint: false,
+  },
+  schema: {
+    action: zod
+      .enum(['override', 'restore', 'list'])
+      .describe('Action to perform.'),
+    urlPattern: zod
+      .string()
+      .optional()
+      .describe(
+        'URL pattern to match script (substring match, case-insensitive).',
+      ),
+    scriptId: zod
+      .string()
+      .optional()
+      .describe('Specific scriptId to override.'),
+    search: zod
+      .string()
+      .optional()
+      .describe('Text to search for in the script source.'),
+    replace: zod
+      .string()
+      .optional()
+      .describe('Replacement text for search matches.'),
+    newSource: zod
+      .string()
+      .optional()
+      .describe(
+        'Complete new source code (overrides search/replace). Use for full replacements.',
+      ),
+    persist: zod
+      .boolean()
+      .optional()
+      .default(true)
+      .describe(
+        'Auto-restore after navigation by storing the override rule (default: true). Only works with urlPattern.',
+      ),
+  },
+  handler: async (request, response, context) => {
+    const {action, urlPattern, scriptId, search, replace, newSource, persist} =
+      request.params;
+    const debugger_ = context.debuggerContext;
+
+    if (!debugger_.isEnabled()) {
+      response.appendResponseLine(
+        'Debugger is not enabled. Please select a page first.',
+      );
+      return;
+    }
+
+    try {
+      // List mode
+      if (action === 'list') {
+        const overrides = debugger_.getUrlOverrides();
+        if (overrides.size === 0) {
+          response.appendResponseLine('No persisted script overrides.');
+          return;
+        }
+        response.appendResponseLine(
+          `Persisted script overrides (${overrides.size}):\n`,
+        );
+        for (const [url, rule] of overrides) {
+          response.appendResponseLine(`- URL: ${url}`);
+          if (rule.newSource) {
+            response.appendResponseLine(
+              `  Mode: full replacement (${rule.newSource.length} chars)`,
+            );
+          } else {
+            response.appendResponseLine(`  Search: ${rule.search}`);
+            response.appendResponseLine(`  Replace: ${rule.replace}`);
+          }
+          response.appendResponseLine('');
+        }
+        return;
+      }
+
+      // Restore mode — remove persisted override
+      if (action === 'restore') {
+        if (!urlPattern) {
+          response.appendResponseLine(
+            'urlPattern is required for restore action.',
+          );
+          return;
+        }
+        const removed = debugger_.removeUrlOverride(urlPattern);
+        if (removed) {
+          response.appendResponseLine(
+            `Persisted override removed for: ${urlPattern}`,
+          );
+          response.appendResponseLine(
+            'Note: the currently loaded script is still modified. Reload the page to restore the original.',
+          );
+        } else {
+          response.appendResponseLine(
+            `No persisted override found for: ${urlPattern}`,
+          );
+        }
+        return;
+      }
+
+      // Override mode
+      if (!search && !newSource) {
+        response.appendResponseLine(
+          'Either search+replace or newSource must be provided for override action.',
+        );
+        return;
+      }
+
+      // Resolve script to override
+      let targetScriptId = scriptId;
+      let targetUrl = '';
+
+      if (!targetScriptId && urlPattern) {
+        const scripts = debugger_.getScriptsByUrlPattern(urlPattern);
+        if (scripts.length === 0) {
+          response.appendResponseLine(
+            `No script found matching "${urlPattern}". Use list_scripts to see available scripts.`,
+          );
+          return;
+        }
+        const script = scripts[scripts.length - 1]; // most recent
+        targetScriptId = script.scriptId;
+        targetUrl = script.url;
+      } else if (targetScriptId) {
+        const info = debugger_.getScriptById(targetScriptId);
+        if (info) {
+          targetUrl = info.url;
+        }
+      }
+
+      if (!targetScriptId) {
+        response.appendResponseLine(
+          'Either scriptId or urlPattern must be provided.',
+        );
+        return;
+      }
+
+      // Get current source and compute new source
+      const sourceResult = await debugger_.getScriptSource(targetScriptId);
+      const currentSource = sourceResult.scriptSource;
+      let finalSource: string;
+
+      if (newSource) {
+        finalSource = newSource;
+      } else if (search && replace !== undefined) {
+        const occurrences = currentSource.split(search).length - 1;
+        if (occurrences === 0) {
+          response.appendResponseLine(
+            `Search text "${search}" not found in script.`,
+          );
+          return;
+        }
+        finalSource = currentSource.replaceAll(search, replace);
+        response.appendResponseLine(
+          `Replaced ${occurrences} occurrence(s) of "${search}".`,
+        );
+      } else {
+        response.appendResponseLine(
+          'Either newSource or both search and replace must be provided.',
+        );
+        return;
+      }
+
+      // Apply the override
+      const setResult = await debugger_.setScriptSource(
+        targetScriptId,
+        finalSource,
+      );
+      response.appendResponseLine(
+        `✅ Script overridden (${targetScriptId}). Stack changed: ${setResult.stackChanged}`,
+      );
+
+      // Persist the override rule if requested and we have a URL
+      if (persist && targetUrl) {
+        const rule = newSource
+          ? {search: '', replace: '', newSource}
+          : {search: search!, replace: replace!};
+        debugger_.setUrlOverride(targetUrl, rule);
+        response.appendResponseLine(
+          `Persisted override for: ${targetUrl}`,
+        );
+        response.appendResponseLine(
+          'Will auto-apply after navigation/reload.',
+        );
+      }
+    } catch (error) {
+      response.appendResponseLine(
+        `Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  },
+});
