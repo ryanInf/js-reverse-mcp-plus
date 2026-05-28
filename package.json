@@ -49,15 +49,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zhizhuodemao/js-reverse-mcp.git"
+    "url": "git+https://github.com/ryanInf/js-reverse-mcp-plus.git"
   },
-  "author": "zhizhuodemao",
+  "author": "ryanInf",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/zhizhuodemao/js-reverse-mcp/issues"
+    "url": "https://github.com/ryanInf/js-reverse-mcp-plus/issues"
   },
-  "homepage": "https://github.com/zhizhuodemao/js-reverse-mcp#readme",
-  "mcpName": "io.github.zhizhuodemao/js-reverse-mcp",
+  "homepage": "https://github.com/ryanInf/js-reverse-mcp-plus#readme",
+  "mcpName": "io.github.ryanInf/js-reverse-mcp-plus",
   "devDependencies": {
     "@eslint/js": "^9.35.0",
     "@rollup/plugin-commonjs": "^29.0.0",

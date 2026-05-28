@@ -2,7 +2,7 @@
 
 English | [中文](README.md)
 
-A JavaScript reverse engineering MCP server that enables AI coding assistants (Claude, Cursor, Copilot) to debug and analyze JavaScript code in web pages.
+A JavaScript reverse engineering MCP server that enables AI coding assistants (Claude, Cursor, Copilot) to debug, analyze, **and rewrite** JavaScript code in web pages.
 
 Built on the [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-nodejs) protocol-layer anti-detection, with an optional [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) source-level fingerprint mode for strong anti-bot sites. Headed mode, persistent login, and zero JS injection — looks and behaves like a real Chrome.
 
@@ -16,6 +16,7 @@ Built on the [Patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright-nod
 - **Execution control**: pause/resume, step over/into/out with source context in response
 - **Runtime inspection**: evaluate at breakpoints, inspect scope variables
 - **Network analysis**: request initiator call stacks, XHR breakpoints, WebSocket message analysis
+- **JS override**: three-layer rewrite capabilities — pre-load injection (`inject_before_load`), runtime script editing (`override_script`), network response interception (`intercept_response`)
 
 ## Requirements
 
@@ -40,13 +41,7 @@ No installation required. Add to your MCP client configuration:
 ### Claude Code
 
 ```bash
-claude mcp add js-reverse npx js-reverse-mcp
-```
-
-### Codex
-
-```bash
-codex mcp add js-reverse -- npx js-reverse-mcp
+claude mcp add js-reverse -- npx js-reverse-mcp
 ```
 
 ### Cursor
@@ -62,7 +57,7 @@ code --add-mcp '{"name":"js-reverse","command":"npx","args":["js-reverse-mcp"]}'
 ## Local Installation (Alternative)
 
 ```bash
-git clone https://github.com/zhizhuodemao/js-reverse-mcp.git
+git clone https://github.com/ryanInf/js-reverse-mcp-plus.git
 cd js-reverse-mcp
 npm install
 npm run build
@@ -100,7 +95,7 @@ Other navigation-level safeguards (both modes):
 
 When to enable `--cloak`: only for sites that block you on fingerprint despite all of the above. See [docs/cloak.en.md](docs/cloak.en.md) for the full guide and tradeoffs.
 
-## Tools (21)
+## Tools (24)
 
 ### Page & Navigation
 
@@ -140,6 +135,15 @@ When to enable `--cloak`: only for sites that block you on fingerprint despite a
 | `list_network_requests`  | List network requests, or get one by reqid                           |
 | `get_request_initiator`  | Get JavaScript call stack for a network request                      |
 | `get_websocket_messages` | List WebSocket connections, analyze messages, or get message details |
+| `intercept_response`     | Intercept and modify network responses (static replacement or JS transform) ⚠️ Activates CDP Fetch domain, may be detected by anti-bot systems |
+
+### JS Override
+
+| Tool                   | Description                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `inject_before_load`   | Inject JS before any page script on every load (`Page.addScriptToEvaluateOnNewDocument`), persists across navigations until removed |
+| `override_script`      | Replace loaded script source in V8 at runtime (`Debugger.setScriptSource`), takes effect immediately, optional auto-restore after navigation |
+| `intercept_response`   | Intercept and modify network responses at the network layer (`Fetch.enable`), supports static replacement or JS transform function |
 
 ### Inspection
 
@@ -180,6 +184,26 @@ Trigger an action on the page, then inspect arguments, call stack and scope vari
 
 ```
 List WebSocket connections, analyze message patterns, view messages of specific types
+```
+
+### JS Override / Rewriting
+
+**Intercept encryption parameters** — monkey-patch before page scripts load:
+
+```
+Use inject_before_load to inject JS that intercepts arguments to window.encrypt
+```
+
+**Modify scripts at runtime** — remove debugger statements or detection logic:
+
+```
+Use override_script to search for anti-debugging code in the target script and replace it with empty strings
+```
+
+**Replace at the network layer** — swap an entire JS file's response:
+
+```
+Use intercept_response to intercept a JS file load and replace it with a modified version
 ```
 
 ## Configuration Options
